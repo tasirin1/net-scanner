@@ -99,7 +99,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
                 android:orientation="horizontal"
-                android:weightSum="6">
+                android:weightSum="7">
                 <TextView
                     android:id="@+id/preLocal"
                     android:layout_width="0dp"
@@ -162,7 +162,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:orientation="horizontal"
-                android:weightSum="6">
+                android:weightSum="7">
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnQuick"
                     android:layout_width="0dp"
@@ -222,6 +222,16 @@
                     android:layout_marginStart="3dp"
                     android:backgroundTint="#33691E"
                     android:text="Shares"
+                    android:textAllCaps="false"
+                    android:textSize="13sp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnDevices"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:backgroundTint="#01579B"
+                    android:text="Devices"
                     android:textAllCaps="false"
                     android:textSize="13sp" />
             </LinearLayout>

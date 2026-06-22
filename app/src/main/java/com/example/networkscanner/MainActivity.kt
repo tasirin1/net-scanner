@@ -56,6 +56,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnCamera).setOnClickListener { cameraScan() }
         findViewById<MaterialButton>(R.id.btnRouter).setOnClickListener { routerScan() }
         findViewById<MaterialButton>(R.id.btnShares).setOnClickListener { sharesScan() }
+        findViewById<MaterialButton>(R.id.btnDevices).setOnClickListener { devicesScan() }
         // Preset chips
         findViewById<TextView>(R.id.preLocal).setOnClickListener { inputTarget.setText("192.168.0.0/24") }
         findViewById<TextView>(R.id.preRouter).setOnClickListener { inputTarget.setText("192.168.0.1") }
@@ -1565,6 +1566,284 @@ class MainActivity : AppCompatActivity() {
         tvResults.text = sb.toString().trimStart()
         tvResults.movementMethod = LinkMovementMethod.getInstance()
         tvSummary.text = "${shares.size} host(s) with shares"
+    }
+
+
+    // ─── Device Discovery (all connected devices) ───
+    private fun devicesScan() {
+        if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
+        val targets = expandTarget(target)
+        val hostCount = if (targets.size > 1) targets.size else 254
+        AlertDialog.Builder(this)
+            .setTitle("Device Discovery")
+            .setMessage("Scanning all connected devices on $target\n\n~$hostCount IP(s) to check\n\nIdentifies device type by probing\ncommon ports & services.")
+            .setPositiveButton("Scan") { _, _ -> runDevicesScan(target) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private data class DeviceInfo(
+        val ip: String,
+        val hostname: String,
+        val type: String,
+        val ports: String,
+        val mac: String,
+        val rtt: String
+    )
+
+    private val deviceProbePorts = intArrayOf(80, 443, 22, 23, 21, 445, 139, 554, 8080, 8291, 3389, 5900, 3306, 2049, 53, 161)
+
+    private fun runDevicesScan(target: String) {
+        isScanning = true
+        cardResults.visibility = View.VISIBLE
+        tvResults.text = "Discovering devices...\n"
+        tvSummary.text = ""
+        findViewById<View>(R.id.btnSave).visibility = View.GONE
+        status("Device discovery...", "#01579B", true)
+
+        Thread {
+            val devices = ConcurrentHashMap<String, DeviceInfo>()
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val targets = expandTarget(target)
+                if (targets.isEmpty()) {
+                    uiPost("Invalid target", "#C62828", false)
+                    isScanning = false
+                    return@Thread
+                }
+
+                // On local subnet, use ARP scan first
+                val localIp = getWifiIp()
+                val isLocal = targets.size > 1 && target.contains(localIp.substringBeforeLast("."))
+                var liveHosts = targets.toSet()
+
+                if (isLocal) {
+                    uiPost("Discovering live hosts...", "#01579B", true)
+                    val subnet = targets.first().substringBeforeLast(".") + "."
+                    val live = arpScan(subnet)
+                    if (live.isNotEmpty()) liveHosts = live
+                }
+
+                val hosts = liveHosts.toList()
+                uiPost("Identifying ${hosts.size} device(s)...", "#01579B", true)
+
+                val latch = CountDownLatch(hosts.size)
+                val pool = Executors.newFixedThreadPool(30)
+
+                for (ip in hosts) {
+                    if (!isScanning) { latch.countDown(); continue }
+                    pool.execute {
+                        try {
+                            val info = identifyDevice(ip)
+                            if (info != null) {
+                                devices[ip] = info
+                                ui.post { updateDevicesResults(devices) }
+                            }
+                        } finally { latch.countDown() }
+                    }
+                }
+
+                pool.shutdown()
+                latch.await()
+                ui.post { updateDevicesResults(devices) }
+
+            } catch (e: Exception) {
+                uiPost("Error: ${e.message}", "#C62828", false)
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            ui.post {
+                val routerCount = devices.values.count { it.type.contains("Router", ignoreCase = true) }
+                val cameraCount = devices.values.count { it.type.contains("Camera", ignoreCase = true) }
+                val computerCount = devices.values.count { it.type.contains("PC", ignoreCase = true) || it.type.contains("Windows", ignoreCase = true) || it.type.contains("Linux") }
+                val phoneCount = devices.values.count { it.type.contains("Phone", ignoreCase = true) || it.type.contains("Android", ignoreCase = true) }
+                val summary = "${devices.size} device(s) | $routerCount router(s) · $cameraCount camera(s) · $computerCount computer(s) · $phoneCount phone(s)"
+                tvSummary.text = summary
+                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
+                status("${devices.size} device(s) in ${elapsed / 1000}s", "#01579B", true)
+                toast("${devices.size} device(s) found")
+            }
+            isScanning = false
+        }.start()
+    }
+
+    private fun identifyDevice(ip: String): DeviceInfo? {
+        var hostname = ""
+        var rtt = ""
+        var openPorts = mutableListOf<Pair<Int, String>>()
+
+        // Ping & hostname
+        try {
+            val addr = InetAddress.getByName(ip)
+            val start = System.nanoTime()
+            val reachable = addr.isReachable(1000)
+            if (!reachable) return null
+            val ms = (System.nanoTime() - start) / 1_000_000
+            if (ms < 1000) rtt = "${ms}ms"
+
+            val hn = addr.hostName ?: ""
+            if (hn != ip) hostname = hn
+        } catch (_: Exception) { return null }
+
+        // Probe essential ports
+        for (port in deviceProbePorts) {
+            try {
+                val s = Socket()
+                s.connect(InetSocketAddress(ip, port), 400)
+                if (s.isConnected) {
+                    val svcName = when (port) {
+                        22 -> "SSH"; 23 -> "Telnet"; 21 -> "FTP"; 80 -> "HTTP"
+                        443 -> "HTTPS"; 445 -> "SMB"; 139 -> "NetBIOS"
+                        554 -> "RTSP"; 8080 -> "HTTP-Alt"; 8291 -> "Winbox"
+                        3389 -> "RDP"; 5900 -> "VNC"; 3306 -> "MySQL"
+                        2049 -> "NFS"; 53 -> "DNS"; 161 -> "SNMP"
+                        else -> "P$port"
+                    }
+                    openPorts.add(Pair(port, svcName))
+                    s.close()
+                }
+            } catch (_: Exception) { }
+        }
+
+        if (openPorts.isEmpty()) {
+            // Host is alive but no open ports - probably a phone/tablet/IoT
+            val type = guessDeviceByHostname(hostname)
+            return DeviceInfo(ip, hostname, type, "alive (no open ports)", "", rtt)
+        }
+
+        // Classify device
+        val type = classifyDevice(openPorts, ip, hostname)
+        val portsStr = openPorts.sortedBy { it.first }.joinToString(", ") { it.second }
+
+        return DeviceInfo(ip, hostname, type, portsStr, "", rtt)
+    }
+
+    private fun classifyDevice(ports: List<Pair<Int, String>>, ip: String, hostname: String): String {
+        val portNums = ports.map { it.first }.toSet()
+        val svcs = ports.map { it.second }
+
+        // Router/Gateway - has web admin + possibly DNS/DHCP/Winbox
+        if (portNums.contains(80) || portNums.contains(443) || portNums.contains(8080)) {
+            if (portNums.contains(8291) || portNums.contains(53) || portNums.contains(2000)) {
+                val result = try {
+                    val conn = URL("http://$ip:/").openConnection() as HttpURLConnection
+                    conn.connectTimeout = 500
+                    val server = conn.getHeaderField("Server") ?: ""
+                    conn.disconnect()
+                    when {
+                        server.contains("MikroTik") || server.contains("RouterOS") -> "Router (MikroTik)"
+                        server.contains("TP-Link") -> "Router (TP-Link)"
+                        server.contains("Tenda") -> "Router (Tenda)"
+                        server.contains("GoAhead") -> "Router"
+                        else -> "Router"
+                    }
+                } catch (_: Exception) { "Router" }
+                return result
+            }
+        }
+
+        // Camera - RTSP
+        if (portNums.contains(554)) return "Camera (RTSP)"
+
+        // Windows PC - SMB + RDP + NetBIOS
+        if (portNums.contains(445) || portNums.contains(139)) {
+            if (portNums.contains(3389)) return "Windows PC"
+            if (portNums.contains(135)) return "Windows PC"
+            return "Windows/Linux (SMB)"
+        }
+
+        // Linux/Unix server - SSH
+        if (portNums.contains(22)) {
+            if (portNums.contains(80) || portNums.contains(443)) return "Linux Server (SSH+Web)"
+            if (portNums.contains(3306)) return "Database Server"
+            return "Linux/Unix"
+        }
+
+        // Printer
+        if (portNums.contains(631) || portNums.contains(9100) || portNums.contains(515)) return "Printer"
+
+        // VNC
+        if (portNums.contains(5900)) return "Remote Desktop (VNC)"
+
+        // Web server only
+        if (portNums.contains(80) || portNums.contains(443) || portNums.contains(8080)) {
+            val result = try {
+                val conn = URL("http://$ip:${if (portNums.contains(80)) 80 else portNums.first { it == 443 || it == 8080 }}/").openConnection() as HttpURLConnection
+                conn.connectTimeout = 500
+                val server = conn.getHeaderField("Server") ?: ""
+                conn.disconnect()
+                when {
+                    server.contains("Apache") -> "Web Server (Apache)"
+                    server.contains("nginx") -> "Web Server (nginx)"
+                    server.contains("IIS") -> "Web Server (IIS)"
+                    server.contains("GoAhead") -> "IoT Device"
+                    else -> "Web Server"
+                }
+            } catch (_: Exception) { "Web Server" }
+            return result
+        }
+
+        // FTP server
+        if (portNums.contains(21)) return "FTP Server"
+
+        // NFS
+        if (portNums.contains(2049)) return "NAS/Storage"
+
+        // SNMP - network device
+        if (portNums.contains(161)) return "Network Device (SNMP)"
+
+        // Telnet
+        if (portNums.contains(23)) return "Legacy Device (Telnet)"
+
+        // DNS
+        if (portNums.contains(53)) return "DNS Server"
+
+        // Only SSH
+        if (portNums.size == 1 && portNums.contains(22)) return "Linux/SSH Device"
+
+        return "Unknown Device"
+    }
+
+    private fun guessDeviceByHostname(hostname: String): String {
+        val h = hostname.lowercase()
+        return when {
+            h.contains("phone") || h.contains("iphone") || h.contains("android") || h.contains("samsung") -> "Phone"
+            h.contains("tv") || h.contains("television") || h.contains("led") -> "Smart TV"
+            h.contains("printer") || h.contains("print") -> "Printer"
+            h.contains("camera") || h.contains("cam") || h.contains("cctv") -> "Camera"
+            h.contains("laptop") || h.contains("pc") || h.contains("desktop") || h.contains("computer") -> "PC"
+            h.contains("tablet") || h.contains("ipad") -> "Tablet"
+            h.contains("router") || h.contains("gateway") || h.contains("ap.") || h.contains("switch") -> "Network Device"
+            h.contains("nas") || h.contains("storage") || h.contains("disk") -> "NAS"
+            h.contains("iot") || h.contains("sensor") -> "IoT"
+            h.contains("server") -> "Server"
+            else -> "Device (no ports)"
+        }
+    }
+
+    private fun updateDevicesResults(devices: ConcurrentHashMap<String, DeviceInfo>) {
+        val sb = StringBuilder()
+        val sorted = devices.entries.sortedBy { it.key }
+        var num = 1
+        for ((ip, dev) in sorted) {
+            val osGuess = if (dev.hostname.isNotEmpty()) "(${dev.hostname})" else ""
+            sb.appendLine("${num}. http://$ip/ $osGuess")
+            sb.appendLine("   \u2514 \uD83C\uDF10 ${dev.type}")
+
+            if (dev.rtt.isNotEmpty()) {
+                sb.appendLine("     \u26A1 ${dev.rtt}")
+            }
+            if (dev.ports.isNotEmpty() && !dev.ports.contains("alive")) {
+                sb.appendLine("     \uD83D\uDD0C $dev.ports")
+            }
+            sb.appendLine()
+            num++
+        }
+        tvResults.text = sb.toString().trimStart()
+        tvResults.movementMethod = LinkMovementMethod.getInstance()
+        tvSummary.text = "${devices.size} device(s) found"
     }
 
     private fun uiPost(msg: String, hex: String, ok: Boolean) {
