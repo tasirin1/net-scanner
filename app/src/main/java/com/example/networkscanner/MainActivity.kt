@@ -948,8 +948,8 @@ class MainActivity : AppCompatActivity() {
                 try {
                     // RTSP probe
                     if (port == 554 || port == 8554) {
-                        s.send(("OPTIONS rtsp://$ip:$port RTSP/1.0\r\n" +
-                                "CSeq: 1\r\n\r\n").toByteArray(Charsets.UTF_8))
+                        s.getOutputStream().write(("OPTIONS rtsp://$ip:$port RTSP/1.0\r\n" +
+                                "CSeq: 1\r\n\r\n").toByteArray())
                         val resp = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
                         val response = resp.readLine() ?: ""
                         if (response.contains("RTSP")) {
@@ -963,7 +963,7 @@ class MainActivity : AppCompatActivity() {
                             "<s:Body>" +
                             "<GetCapabilities xmlns=\"http://www.onvif.org/ver10/device/wsdl\"/>" +
                             "</s:Body></s:Envelope>"
-                        s.send(onvifReq.toByteArray(Charsets.UTF_8))
+                        s.getOutputStream().write(onvifReq.toByteArray())
                         val resp = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
                         val onvifResp = StringBuilder()
                         var line: String?
