@@ -23,121 +23,74 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardElevation="2dp"
-                app:cardCornerRadius="16dp"
+                app:cardCornerRadius="14dp"
                 app:strokeWidth="0dp">
-
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:background="#00695C"
                     android:gravity="center"
-                    android:orientation="horizontal"
-                    android:padding="14dp">
+                    android:padding="12dp">
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
                         android:orientation="vertical">
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="NetScan"
                             android:textColor="#FFFFFF"
-                            android:textSize="20sp"
+                            android:textSize="18sp"
                             android:textStyle="bold" />
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:text="Nmap-style Network Scanner"
+                            android:layout_marginTop="1dp"
+                            android:text="Enter IP / URL / CIDR below"
                             android:textColor="#80CBC4"
-                            android:textSize="12sp" />
+                            android:textSize="11sp" />
                     </LinearLayout>
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ═══ Target Input ═══ -->
+            <!-- ═══ TARGET INPUT ═══ SIMPLE & BIG ═══ -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
-                app:cardElevation="0dp"
-                app:cardCornerRadius="12dp"
-                app:strokeColor="#B2DFDB"
-                app:strokeWidth="1dp">
+                android:layout_marginTop="10dp"
+                app:cardElevation="1dp"
+                app:cardCornerRadius="10dp"
+                app:strokeColor="#00695C"
+                app:strokeWidth="2dp">
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="14dp">
+                    android:padding="12dp">
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Target"
                         android:textColor="#004D40"
-                        android:textSize="13sp"
+                        android:textSize="14sp"
                         android:textStyle="bold" />
-                    <com.google.android.material.textfield.TextInputLayout
+                    <EditText
+                        android:id="@+id/inputTarget"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="44dp"
                         android:layout_marginTop="4dp"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:hint="IP, hostname, or CIDR (e.g. 192.168.0.0/24)">
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/inputTarget"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="text"
-                            android:maxLines="1"
-                            android:text="192.168.0.0/24" />
-                    </com.google.android.material.textfield.TextInputLayout>
+                        android:background="#FFFFFF"
+                        android:padding="10dp"
+                        android:textSize="15sp"
+                        android:textColor="#1A1A2E"
+                        android:singleLine="true"
+                        android:hint="e.g. 192.168.0.1, 10.0.0.0/24, barayacell.com"
+                        android:text="192.168.0.0/24"
+                        android:inputType="textUri" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ═══ Scan Buttons ═══ -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:orientation="horizontal"
-                android:weightSum="3">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnQuick"
-                    android:layout_width="0dp"
-                    android:layout_height="46dp"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="4dp"
-                    android:backgroundTint="#00695C"
-                    android:text="Quick"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnFull"
-                    android:layout_width="0dp"
-                    android:layout_height="46dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="4dp"
-                    android:layout_marginEnd="4dp"
-                    android:backgroundTint="#00897B"
-                    android:text="Full"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnNmap"
-                    android:layout_width="0dp"
-                    android:layout_height="46dp"
-                    android:layout_weight="1"
-                    android:layout_marginStart="4dp"
-                    android:backgroundTint="#004D40"
-                    android:text="nmap"
-                    android:textAllCaps="false"
-                    android:textSize="13sp" />
-            </LinearLayout>
-
-            <!-- Quick presets row -->
+            <!-- ═══ PRESETS (PRE-FILL BUTTONS) ═══ -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -145,63 +98,109 @@
                 android:orientation="horizontal"
                 android:weightSum="4">
                 <TextView
+                    android:id="@+id/preLocal"
                     android:layout_width="0dp"
-                    android:layout_height="36dp"
+                    android:layout_height="34dp"
                     android:layout_weight="1"
+                    android:layout_marginEnd="3dp"
                     android:gravity="center"
                     android:background="@drawable/btn_preset"
                     android:clickable="true"
                     android:focusable="true"
-                    android:onClick="setLocal"
-                    android:text="Local /24"
+                    android:text="192.168.0.0/24"
                     android:textColor="#00695C"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
                 <TextView
+                    android:id="@+id/preRouter"
                     android:layout_width="0dp"
-                    android:layout_height="36dp"
+                    android:layout_height="34dp"
                     android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
                     android:gravity="center"
                     android:background="@drawable/btn_preset"
                     android:clickable="true"
                     android:focusable="true"
-                    android:onClick="setRouter"
-                    android:text="Router"
+                    android:text="192.168.0.1"
                     android:textColor="#00695C"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
                 <TextView
+                    android:id="@+id/preWan"
                     android:layout_width="0dp"
-                    android:layout_height="36dp"
+                    android:layout_height="34dp"
                     android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
                     android:gravity="center"
                     android:background="@drawable/btn_preset"
                     android:clickable="true"
                     android:focusable="true"
-                    android:onClick="setWan"
-                    android:text="WAN IP"
+                    android:text="157.66.50.147"
                     android:textColor="#00695C"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
                 <TextView
+                    android:id="@+id/preHost"
                     android:layout_width="0dp"
-                    android:layout_height="36dp"
+                    android:layout_height="34dp"
                     android:layout_weight="1"
+                    android:layout_marginStart="3dp"
                     android:gravity="center"
                     android:background="@drawable/btn_preset"
                     android:clickable="true"
                     android:focusable="true"
-                    android:onClick="setLocalhost"
-                    android:text="Localhost"
+                    android:text="barayacell.com"
                     android:textColor="#00695C"
-                    android:textSize="11sp" />
+                    android:textSize="10sp" />
             </LinearLayout>
 
-            <!-- ═══ Status ═══ -->
+            <!-- ═══ SCAN BUTTONS ═══ -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:weightSum="3">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnQuick"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="3dp"
+                    android:backgroundTint="#00695C"
+                    android:text="Quick"
+                    android:textAllCaps="false"
+                    android:textSize="13sp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnFull"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:layout_marginEnd="3dp"
+                    android:backgroundTint="#00897B"
+                    android:text="Full"
+                    android:textAllCaps="false"
+                    android:textSize="13sp" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnNmap"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:layout_marginStart="3dp"
+                    android:backgroundTint="#004D40"
+                    android:text="Nmap"
+                    android:textAllCaps="false"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- ═══ STATUS ═══ -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="8dp"
                 app:cardElevation="0dp"
-                app:cardCornerRadius="10dp"
+                app:cardCornerRadius="8dp"
                 app:strokeColor="#B2DFDB"
                 app:strokeWidth="1dp">
                 <LinearLayout
@@ -209,7 +208,7 @@
                     android:layout_height="wrap_content"
                     android:gravity="center_vertical"
                     android:orientation="horizontal"
-                    android:padding="10dp">
+                    android:padding="8dp">
                     <View
                         android:id="@+id/dotStatus"
                         android:layout_width="10dp"
@@ -226,29 +225,45 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
-            <!-- ═══ Results ═══ -->
+            <!-- ═══ RESULTS ═══ -->
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardResults"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                android:visibility="gone"
+                android:layout_marginTop="8dp"
+                android:visibility="visible"
                 app:cardElevation="0dp"
-                app:cardCornerRadius="14dp"
+                app:cardCornerRadius="12dp"
                 app:strokeColor="#B2DFDB"
                 app:strokeWidth="1dp">
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="14dp">
-                    <TextView
-                        android:layout_width="wrap_content"
+                    android:padding="12dp">
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Results"
-                        android:textColor="#004D40"
-                        android:textSize="15sp"
-                        android:textStyle="bold" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Results"
+                            android:textColor="#004D40"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnClear"
+                            android:layout_width="wrap_content"
+                            android:layout_height="28dp"
+                            android:backgroundTint="#E0E0E0"
+                            android:text="Clear"
+                            android:textAllCaps="false"
+                            android:textColor="#555"
+                            android:textSize="11sp" />
+                    </LinearLayout>
                     <TextView
                         android:id="@+id/tvSummary"
                         android:layout_width="wrap_content"
@@ -260,31 +275,21 @@
                         android:id="@+id/tvResults"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="6dp"
+                        android:layout_marginTop="4dp"
                         android:fontFamily="monospace"
                         android:lineSpacingExtra="1dp"
                         android:textColor="#1A1A2E"
-                        android:textSize="10.5sp" />
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnClear"
-                        android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:layout_gravity="end"
-                        android:layout_marginTop="6dp"
-                        android:backgroundTint="#E0E0E0"
-                        android:text="Clear"
-                        android:textAllCaps="false"
-                        android:textColor="#555"
-                        android:textSize="12sp" />
+                        android:textSize="10sp"
+                        android:visibility="visible" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
+                android:layout_marginTop="12dp"
                 android:gravity="center"
-                android:text="NetScan v1.1 · Nmap-style engine"
+                android:text="NetScan v1.1"
                 android:textColor="#B2DFDB"
                 android:textSize="10sp" />
 

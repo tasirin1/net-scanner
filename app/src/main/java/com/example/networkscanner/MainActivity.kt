@@ -10,7 +10,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.android.material.button.MaterialButton
-import com.google.android.material.textfield.TextInputEditText
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -27,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var inputTarget: TextInputEditText
+    private lateinit var inputTarget: android.widget.EditText
     private lateinit var statusText: TextView
     private lateinit var statusDot: View
     private lateinit var tvResults: TextView
@@ -52,17 +51,17 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
         findViewById<MaterialButton>(R.id.btnNmap).setOnClickListener { nmapScan() }
+        // Preset chips
+        findViewById<TextView>(R.id.preLocal).setOnClickListener { inputTarget.setText("192.168.0.0/24") }
+        findViewById<TextView>(R.id.preRouter).setOnClickListener { inputTarget.setText("192.168.0.1") }
+        findViewById<TextView>(R.id.preWan).setOnClickListener { inputTarget.setText("157.66.50.147") }
+        findViewById<TextView>(R.id.preHost).setOnClickListener { inputTarget.setText("barayacell.com") }
+
         findViewById<MaterialButton>(R.id.btnClear).setOnClickListener {
             cardResults.visibility = View.GONE
             status("Ready", "#78909C", false)
         }
     }
-
-    // ─── Preset buttons (called via android:onClick) ───
-    fun setLocal(v: View) { inputTarget.setText("192.168.0.0/24") }
-    fun setRouter(v: View) { inputTarget.setText("192.168.0.1") }
-    fun setWan(v: View) { inputTarget.setText("157.66.50.147") }
-    fun setLocalhost(v: View) { inputTarget.setText("127.0.0.1") }
 
     // ─── Get target from input ───
     private fun getTarget(): String {
