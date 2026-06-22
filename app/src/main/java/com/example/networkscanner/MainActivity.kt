@@ -1583,17 +1583,32 @@ class MainActivity : AppCompatActivity() {
 
 
     // ─── Device Discovery (all connected devices) ───
-    private fun devicesScan() {
+    private fun devicesScan(target: String) {
         if (isScanning) { toast("Already scanning!"); return }
-        val target = getTarget()
         val targets = autoExpandTarget(target)
-        val hostCount = targets.size
-        AlertDialog.Builder(this)
-            .setTitle("Device Discovery")
-            .setMessage("Scanning all connected devices on $target\n\n~$hostCount IP(s) to check\n\nIdentifies device type by probing\ncommon ports & services.")
-            .setPositiveButton("Scan") { _, _ -> runDevicesScan(target) }
-            .setNegativeButton("Cancel", null)
-            .show()
+        if (targets.isEmpty()) {
+            uiPost("Invalid target", "#C62828", false)
+            isScanning = false
+            return@Thread
+        }
+        uiPost("Scanning ${targets.size} host(s)...", "#E65100", true)
+        val latch = CountDownLatch(targets.size)
+        val pool = Executors.newFixedThreadPool(30)
+        for (ip in targets) {
+            if (!isScanning) { latch.countDown(); continue }
+            pool.execute {
+                try {
+                    val info = identifyDevice(ip)
+                    if (info != null) {
+                        synchronized(cameras) { cameras[ip] = info }
+                        ui.post { updateCameraResults(cameras) }
+                    }
+                } finally { latch.countDown() }
+            }
+        }
+        pool.shutdown()
+        latch.await()
+        isScanning = false
     }
 
     private data class DeviceInfo(
