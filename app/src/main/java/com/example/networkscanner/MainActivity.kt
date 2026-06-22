@@ -109,6 +109,7 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Initializing $mode...\n"
         tvSummary.text = ""
+        findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Preparing $mode...", "#E65100", true)
 
         Thread {
