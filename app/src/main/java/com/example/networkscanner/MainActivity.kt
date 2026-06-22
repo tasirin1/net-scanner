@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
         findViewById<MaterialButton>(R.id.btnNmap).setOnClickListener { nmapScan() }
+        findViewById<MaterialButton>(R.id.btnCamera).setOnClickListener { cameraScan() }
         // Preset chips
         findViewById<TextView>(R.id.preLocal).setOnClickListener { inputTarget.setText("192.168.0.0/24") }
         findViewById<TextView>(R.id.preRouter).setOnClickListener { inputTarget.setText("192.168.0.1") }
@@ -773,6 +774,275 @@ class MainActivity : AppCompatActivity() {
         50200 -> "Web-Alt29"; 61616 -> "Web-Alt30"
         64738 -> "Mumble"; 65535 -> "Web-Alt31"
         else -> "?"
+    }
+
+
+    // ─── Hidden Camera Scanner ───
+    private fun cameraScan() {
+        if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
+        AlertDialog.Builder(this)
+            .setTitle("Camera Scanner")
+            .setMessage("Scanning for hidden IP cameras on $target\n\nChecks common camera ports:\n554 (RTSP), 8899 (ONVIF), 34567 (Hikvision),\n37777 (Dahua), 80/443/8080/8443 (Web)\n\nAlso probes for camera-specific HTTP responses.")
+            .setPositiveButton("Scan") { _, _ -> runCameraScan(target) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private val cameraPorts = intArrayOf(
+        80, 443, 554, 8080, 8443, 8899, 34567, 37777,
+        5000, 7000, 8000, 8554, 9000, 10000, 37215, 49152
+    )
+
+    private data class CameraInfo(
+        val ip: String,
+        val port: Int,
+        val manufacturer: String,
+        val model: String,
+        val type: String
+    )
+
+    private fun runCameraScan(target: String) {
+        isScanning = true
+        cardResults.visibility = View.VISIBLE
+        tvResults.text = "Scanning for hidden cameras...\n"
+        tvSummary.text = ""
+        findViewById<View>(R.id.btnSave).visibility = View.GONE
+        status("Camera scan...", "#6A1B9A", true)
+
+        Thread {
+            val cameras = ConcurrentHashMap<String, MutableList<String>>()
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val targets = expandTarget(target)
+                if (targets.isEmpty()) {
+                    uiPost("Invalid target", "#C62828", false)
+                    isScanning = false
+                    return@Thread
+                }
+                uiPost("Checking ${targets.size} host(s) for cameras...", "#6A1B9A", true)
+
+                val latch = CountDownLatch(targets.size)
+                val pool = Executors.newFixedThreadPool(30)
+
+                for (ip in targets) {
+                    if (!isScanning) { latch.countDown(); continue }
+                    pool.execute {
+                        try {
+                            val foundCameras = mutableListOf<String>()
+
+                            for (port in cameraPorts) {
+                                if (!isScanning) break
+                                val cam = probeCamera(ip, port)
+                                if (cam != null) {
+                                    synchronized(foundCameras) {
+                                        foundCameras.add("$cam")
+                                    }
+                                }
+                            }
+
+                            if (foundCameras.isNotEmpty()) {
+                                synchronized(cameras) {
+                                    cameras[ip] = foundCameras
+                                }
+                                ui.post { updateCameraResults(cameras) }
+                            }
+                        } finally { latch.countDown() }
+                    }
+                }
+
+                pool.shutdown()
+                latch.await()
+                ui.post { updateCameraResults(cameras) }
+
+            } catch (e: Exception) {
+                uiPost("Error: ${e.message}", "#C62828", false)
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            val summary = "\n── Done in ${elapsed / 1000}s ──  ${cameras.size} camera(s) found"
+            ui.post {
+                tvSummary.text = "$summary\n\u26A0\uFE0F Review privacy settings if unexpected cameras found"
+                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
+                status("${cameras.size} camera(s) in ${elapsed / 1000}s", "#6A1B9A", true)
+                toast("${cameras.size} camera(s) found")
+            }
+            isScanning = false
+        }.start()
+    }
+
+    private fun probeCamera(ip: String, port: Int): String? {
+        return try {
+            val s = Socket()
+            s.connect(InetSocketAddress(ip, port), 500)
+            if (!s.isConnected) { s.close(); return null }
+
+            var result: String? = null
+            val isHttpPort = port in intArrayOf(80, 443, 8080, 8443, 8000, 9000, 10000, 5000, 7000)
+
+            if (isHttpPort) {
+                try {
+                    val protocol = if (port == 443 || port == 8443) "https" else "http"
+                    val conn = URL("$protocol://$ip:$port/").openConnection() as HttpURLConnection
+                    conn.connectTimeout = 800
+                    conn.readTimeout = 800
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetScan/1.1")
+                    val code = try { conn.responseCode } catch (_: Exception) { 0 }
+                    val server = conn.getHeaderField("Server") ?: ""
+                    val www = conn.getHeaderField("WWW-Authenticate") ?: ""
+                    val ct = conn.getHeaderField("Content-Type") ?: ""
+
+                    // Camera signatures
+                    var title = ""
+                    try {
+                        val reader = BufferedReader(InputStreamReader(
+                            if (code in 200..399) conn.inputStream else conn.errorStream, "UTF-8"), 512)
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            val m = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(line ?: "")
+                            if (m != null) { title = m.groupValues[1].take(60).trim(); break }
+                            // Check for camera-specific keywords in body
+                            val lower = (line ?: "").lowercase()
+                            if (lower.contains("hikvision") || lower.contains("dahua") ||
+                                lower.contains("onvif") || lower.contains("rtsp") ||
+                                lower.contains("ip camera") || lower.contains("webcam") ||
+                                lower.contains("network camera")) {
+                                if (title.isEmpty()) title = "Camera detected"
+                            }
+                        }
+                        reader.close()
+                    } catch (_: Exception) { }
+                    conn.disconnect()
+
+                    // Check camera indicators
+                    val isCamera = title.lowercase().contains("camera") ||
+                        title.lowercase().contains("hikvision") ||
+                        title.lowercase().contains("dahua") ||
+                        title.lowercase().contains("webcam") ||
+                        title.lowercase().contains("onvif") ||
+                        title.lowercase().contains("surveillance") ||
+                        title.lowercase().contains("nvr") ||
+                        title.lowercase().contains("dvr") ||
+                        server.contains("Hikvision") ||
+                        server.contains("Dahua") ||
+                        server.contains("IP Camera") ||
+                        server.contains("Network Camera") ||
+                        www.lowercase().contains("camera") ||
+                        www.lowercase().contains("digest") ||
+                        ct.contains("video")
+
+                    if (isCamera || title.isNotEmpty() && title.lowercase().contains("camera")) {
+                        var mfg = guessCameraMfg(title, server, www)
+                        if (mfg.isEmpty()) mfg = guessCameraMfgFromPort(port)
+                        result = "\uD83D\uDCF7 Port $port - ${mfg.ifEmpty { "Unknown" }}"
+                        if (title.isNotEmpty() && !title.lowercase().contains("camera") &&
+                            !title.lowercase().contains("hikvision") && !title.lowercase().contains("dahua")) {
+                            result += " \"$title\""
+                        }
+                        if (www.isNotEmpty()) result += " [Auth]"
+                    }
+                } catch (_: Exception) { }
+            } else {
+                // Non-HTTP ports: RTSP, ONVIF, etc.
+                try {
+                    // RTSP probe
+                    if (port == 554 || port == 8554) {
+                        s.send(("OPTIONS rtsp://$ip:$port RTSP/1.0\r\n" +
+                                "CSeq: 1\r\n\r\n").toByteArray(Charsets.UTF_8))
+                        val resp = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
+                        val response = resp.readLine() ?: ""
+                        if (response.contains("RTSP")) {
+                            result = "\uD83D\uDCF7 Port $port (RTSP) - Camera stream"
+                        }
+                    }
+                    // ONVIF
+                    if (port == 8899 || port == 5000) {
+                        val onvifReq = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                            "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">" +
+                            "<s:Body>" +
+                            "<GetCapabilities xmlns=\"http://www.onvif.org/ver10/device/wsdl\"/>" +
+                            "</s:Body></s:Envelope>"
+                        s.send(onvifReq.toByteArray(Charsets.UTF_8))
+                        val resp = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
+                        val onvifResp = StringBuilder()
+                        var line: String?
+                        while (resp.readLine().also { line = it } != null) {
+                            onvifResp.append(line)
+                        }
+                        if (onvifResp.toString().contains("ONVIF") ||
+                            onvifResp.toString().contains("Capabilities")) {
+                            result = "\uD83D\uDCF7 Port $port (ONVIF) - Network camera"
+                        }
+                    }
+                    // Hikvision port
+                    if (port == 34567) {
+                        result = "\uD83D\uDCF7 Port $port (Hikvision SDK)"
+                    }
+                    // Dahua port
+                    if (port == 37777) {
+                        result = "\uD83D\uDCF7 Port $port (Dahua SDK)"
+                    }
+                    if (port == 37215) {
+                        result = "\uD83D\uDCF7 Port $port (Hikvision backdoor)"
+                    }
+                } catch (_: Exception) { }
+            }
+
+            s.close()
+            result
+        } catch (_: Exception) { null }
+    }
+
+    private fun guessCameraMfg(title: String, server: String, www: String): String {
+        val all = "$title $server $www".lowercase()
+        return when {
+            all.contains("hikvision") -> "Hikvision"
+            all.contains("dahua") -> "Dahua"
+            all.contains("tp-link") || all.contains("tp link") -> "TP-Link"
+            all.contains("reolink") -> "Reolink"
+            all.contains("amcrest") -> "Amcrest"
+            all.contains("foscam") -> "Foscam"
+            all.contains("axis") -> "Axis"
+            all.contains("bosch") -> "Bosch"
+            all.contains("panasonic") -> "Panasonic"
+            all.contains("sony") -> "Sony"
+            all.contains("vivotek") -> "Vivotek"
+            all.contains("ubiquiti") || all.contains("unifi") -> "Ubiquiti"
+            all.contains("dlink") || all.contains("d-link") -> "D-Link"
+            all.contains("huawei") -> "Huawei"
+            all.contains("xiaomi") || all.contains("mi camera") -> "Xiaomi"
+            all.contains("ezviz") -> "Ezviz"
+            all.contains("imou") -> "Imou"
+            all.contains("tenda") -> "Tenda"
+            all.contains("netvue") -> "Netvue"
+            else -> ""
+        }
+    }
+
+    private fun guessCameraMfgFromPort(port: Int): String = when (port) {
+        34567 -> "Hikvision"
+        37777 -> "Dahua"
+        37215 -> "Hikvision"
+        8899 -> "ONVIF"
+        554, 8554 -> "RTSP"
+        else -> ""
+    }
+
+    private fun updateCameraResults(cameras: ConcurrentHashMap<String, MutableList<String>>) {
+        val sb = StringBuilder()
+        var num = 1
+        for ((ip, cams) in cameras) {
+            sb.appendLine("\uD83D\uDCF7 $num. http://$ip/")
+            for (cam in cams) {
+                sb.appendLine("   \u2514 $cam")
+            }
+            sb.appendLine()
+            num++
+        }
+        tvResults.text = sb.toString().trimStart()
+        tvResults.movementMethod = LinkMovementMethod.getInstance()
+        tvSummary.text = "${cameras.size} camera(s) found"
     }
 
     private fun uiPost(msg: String, hex: String, ok: Boolean) {
