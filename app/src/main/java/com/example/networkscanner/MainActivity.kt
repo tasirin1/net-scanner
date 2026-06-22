@@ -2,8 +2,8 @@ package com.example.networkscanner
 
 import android.content.ClipboardManager
 import android.content.ClipData
-import android.graphics.Color
 import android.text.method.LinkMovementMethod
+import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -379,22 +379,17 @@ class MainActivity : AppCompatActivity() {
         var hostNum = 1
         for ((host, svcs) in sorted) {
             // Host header
-            sb.append("═ $hostNum. <a href='http://$host/'>$host</a> ")
+            sb.append("═ $hostNum. http://$host/ ")
             val osGuess = os[host]
             if (osGuess != null) sb.append("[$osGuess]")
-            sb.append("<br/>")
+            sb.append("\n")
             for (svc in svcs) {
-                sb.append("   \u2514 $svc<br/>")
+                sb.append("   \u2514 $svc\n")
             }
-            sb.append("<br/>")
+            sb.append("\n")
             hostNum++
         }
-        @Suppress("DEPRECATION")
-        tvResults.text = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
-            Html.fromHtml(sb.toString(), Html.FROM_HTML_MODE_LEGACY)
-        } else {
-            Html.fromHtml(sb.toString())
-        }
+        tvResults.text = sb.toString().trimStart()
         tvResults.movementMethod = LinkMovementMethod.getInstance()
         
         // Summary with host count + open ports count
