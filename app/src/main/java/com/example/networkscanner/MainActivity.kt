@@ -54,6 +54,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
         findViewById<MaterialButton>(R.id.btnNmap).setOnClickListener { nmapScan() }
         findViewById<MaterialButton>(R.id.btnCamera).setOnClickListener { cameraScan() }
+        findViewById<MaterialButton>(R.id.btnRouter).setOnClickListener { routerScan() }
         // Preset chips
         findViewById<TextView>(R.id.preLocal).setOnClickListener { inputTarget.setText("192.168.0.0/24") }
         findViewById<TextView>(R.id.preRouter).setOnClickListener { inputTarget.setText("192.168.0.1") }
@@ -1043,6 +1044,302 @@ class MainActivity : AppCompatActivity() {
         tvResults.text = sb.toString().trimStart()
         tvResults.movementMethod = LinkMovementMethod.getInstance()
         tvSummary.text = "${cameras.size} camera(s) found"
+    }
+
+
+    // ─── Router Scanner ───
+    private fun routerScan() {
+        if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
+        AlertDialog.Builder(this)
+            .setTitle("Router Scanner")
+            .setMessage("Searching for router admin interfaces on $target\n\nChecks common admin ports and paths\nto identify router model & brand.\n\nScans for: MikroTik, TP-Link, Tenda,\nD-Link, ASUS, Netgear, Linksys,\nOpenWrt, DD-WRT, and more.")
+            .setPositiveButton("Scan") { _, _ -> runRouterScan(target) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private val routerPorts = intArrayOf(
+        80, 443, 8080, 8443, 8291, 7547, 5000, 7000,
+        8081, 8082, 8888, 9000, 10000, 2000, 444, 81, 82, 88
+    )
+
+    private val routerPaths = arrayOf(
+        "/", "/admin", "/admin/", "/login", "/login/",
+        "/setup", "/setup/", "/config", "/config/",
+        "/management", "/management/", "/status", "/status/",
+        "/system", "/system/", "/router", "/router/",
+        "/cgi-bin/", "/cgi-bin/login", "/cgi-bin/status",
+        "/main", "/main/", "/home", "/home/",
+        "/index.htm", "/index.html", "/login.htm", "/login.html"
+    )
+
+    private data class RouterInfo(
+        val ip: String,
+        val port: Int,
+        val brand: String,
+        val model: String,
+        val firmware: String,
+        val authType: String,
+        val path: String
+    )
+
+    private fun runRouterScan(target: String) {
+        isScanning = true
+        cardResults.visibility = View.VISIBLE
+        tvResults.text = "Scanning for routers...\n"
+        tvSummary.text = ""
+        findViewById<View>(R.id.btnSave).visibility = View.GONE
+        status("Router scan...", "#E65100", true)
+
+        Thread {
+            val routers = ConcurrentHashMap<String, MutableList<String>>()
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val targets = expandTarget(target)
+                if (targets.isEmpty()) {
+                    uiPost("Invalid target", "#C62828", false)
+                    isScanning = false
+                    return@Thread
+                }
+                uiPost("Checking ${targets.size} host(s) for routers...", "#E65100", true)
+
+                val latch = CountDownLatch(targets.size)
+                val pool = Executors.newFixedThreadPool(30)
+
+                for (ip in targets) {
+                    if (!isScanning) { latch.countDown(); continue }
+                    pool.execute {
+                        try {
+                            val foundRouters = mutableListOf<String>()
+
+                            for (port in routerPorts) {
+                                if (!isScanning) break
+                                val info = probeRouter(ip, port)
+                                if (info != null) {
+                                    synchronized(foundRouters) {
+                                        foundRouters.add(info)
+                                    }
+                                }
+                            }
+
+                            if (foundRouters.isNotEmpty()) {
+                                synchronized(routers) {
+                                    routers[ip] = foundRouters
+                                }
+                                ui.post { updateRouterResults(routers) }
+                            }
+                        } finally { latch.countDown() }
+                    }
+                }
+
+                pool.shutdown()
+                latch.await()
+                ui.post { updateRouterResults(routers) }
+
+            } catch (e: Exception) {
+                uiPost("Error: ${e.message}", "#C62828", false)
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            ui.post {
+                tvSummary.text = "${routers.size} router(s) found in ${elapsed / 1000}s"
+                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
+                status("${routers.size} router(s) in ${elapsed / 1000}s", "#E65100", true)
+                toast("${routers.size} router(s) found")
+            }
+            isScanning = false
+        }.start()
+    }
+
+    private fun probeRouter(ip: String, port: Int): String? {
+        return try {
+            val s = Socket()
+            s.connect(InetSocketAddress(ip, port), 500)
+            if (!s.isConnected) { s.close(); return null }
+
+            var result: String? = null
+
+            // Check if Winbox port (MikroTik)
+            if (port == 8291) {
+                s.close()
+                return "\uD83C\uDF10 Port $port (Winbox) - MikroTik RouterOS"
+            }
+
+            // Check if CWMP/TR-069 port
+            if (port == 7547) {
+                // Try to get response
+                try {
+                    s.getOutputStream().write(("GET / HTTP/1.0\r\nHost: $ip\r\n\r\n").toByteArray())
+                    val reader = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
+                    val resp = reader.readLine() ?: ""
+                    reader.close()
+                    if (resp.contains("200")) {
+                        s.close()
+                        return "\uD83C\uDF10 Port $port (CWMP/TR-069) - Router management"
+                    }
+                } catch (_: Exception) { }
+                s.close()
+                return "\uD83C\uDF10 Port $port (CWMP) - Router"
+            }
+
+            // HTTP probe - check multiple paths
+            val protocol = if (port in intArrayOf(443, 8443, 444)) "https" else "http"
+            val base = "$protocol://$ip:$port"
+
+            var bestInfo: RouterInfo? = null
+            for (path in routerPaths) {
+                try {
+                    val conn = URL("$base$path").openConnection() as HttpURLConnection
+                    conn.connectTimeout = 500
+                    conn.readTimeout = 500
+                    conn.instanceFollowRedirects = false
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 NetScan/1.1")
+
+                    val code = try { conn.responseCode } catch (_: Exception) { 0 }
+                    if (code == 0 || code == 404 || code == 410) { conn.disconnect(); continue }
+
+                    val server = conn.getHeaderField("Server") ?: ""
+                    val www = conn.getHeaderField("WWW-Authenticate") ?: ""
+                    val ct = conn.getHeaderField("Content-Type") ?: ""
+
+                    var title = ""
+                    try {
+                        val stream = if (code in 200..399) conn.inputStream else conn.errorStream
+                        val reader = BufferedReader(InputStreamReader(stream, "UTF-8"), 512)
+                        var line: String?
+                        while (reader.readLine().also { line = it } != null) {
+                            val m = Regex("<title[^>]*>(.*?)</title>", RegexOption.IGNORE_CASE).find(line ?: "")
+                            if (m != null) { title = m.groupValues[1].take(80).trim(); break }
+                        }
+                        reader.close()
+                    } catch (_: Exception) { }
+                    conn.disconnect()
+
+                    val brand = identifyRouterBrand(server, title, www)
+
+                    if (brand.isNotEmpty() || code in 200..302) {
+                        val model = identifyRouterModel(brand, title)
+                        val firmware = extractFirmware(title)
+                        val authType = if (www.isNotEmpty()) {
+                            if (www.contains("Basic", ignoreCase = true)) "Basic Auth"
+                            else if (www.contains("Digest", ignoreCase = true)) "Digest Auth"
+                            else "Auth Required"
+                        } else ""
+
+                        val info = RouterInfo(ip, port, brand, model, firmware, authType, path)
+
+                        // Prefer results with a known brand or login page
+                        if (bestInfo == null || (brand.isNotEmpty() && bestInfo!!.brand.isEmpty())) {
+                            bestInfo = info
+                        }
+                    }
+                } catch (_: Exception) { }
+            }
+
+            s.close()
+
+            if (bestInfo != null) {
+                val info = bestInfo
+                val parts = mutableListOf<String>()
+                parts.add("\uD83C\uDF10 Port ${info.port}")
+                if (info.brand.isNotEmpty()) parts.add(info.brand)
+                if (info.model.isNotEmpty()) parts.add("\"${info.model}\"")
+                if (info.firmware.isNotEmpty()) parts.add("[${info.firmware}]")
+                if (info.authType.isNotEmpty()) parts.add("\uD83D\uDD12 ${info.authType}")
+                if (info.path != "/") parts.add("@ ${info.path}")
+                return parts.joinToString(" ")
+            }
+
+            null
+        } catch (_: Exception) { null }
+    }
+
+    private fun identifyRouterBrand(server: String, title: String, www: String): String {
+        val all = "$server $title $www".lowercase()
+        return when {
+            all.contains("mikrotik") || all.contains("routeros") -> "MikroTik"
+            all.contains("routeros") -> "MikroTik"
+            all.contains("tp-link") || all.contains("tp link") -> "TP-Link"
+            all.contains("tenda") -> "Tenda"
+            all.contains("d-link") || all.contains("dlink") -> "D-Link"
+            all.contains("asus") -> "ASUS"
+            all.contains("netgear") -> "Netgear"
+            all.contains("linksys") || all.contains("cisco") -> "Cisco/Linksys"
+            all.contains("huawei") -> "Huawei"
+            all.contains("zte") -> "ZTE"
+            all.contains("openwrt") -> "OpenWrt"
+            all.contains("dd-wrt") || all.contains("ddwrt") -> "DD-WRT"
+            all.contains("tomato") -> "Tomato"
+            all.contains("ubiquiti") || all.contains("unifi") -> "Ubiquiti"
+            all.contains("meraki") -> "Meraki"
+            all.contains("arris") -> "Arris"
+            all.contains("motorola") -> "Motorola"
+            all.contains("sagemcom") -> "Sagemcom"
+            all.contains("technicolor") -> "Technicolor"
+            all.contains("fritz") || all.contains("avm") -> "AVM FRITZ!"
+            all.contains("zyxel") -> "Zyxel"
+            all.contains("totolink") -> "TOTOLINK"
+            all.contains("mercusys") -> "Mercusys"
+            all.contains("goahead") || all.contains("go ahead") -> "Router (GoAhead)"
+            all.contains("mini_httpd") -> "Router (mini_httpd)"
+            all.contains("httpd") && all.contains("router") -> "Generic Router"
+            all.contains("boa") && !all.contains("python") -> "Router (Boa)"
+            all.contains("thttpd") -> "Router (thttpd)"
+            all.contains("lighttpd") -> "Linux (lighttpd)"
+            all.contains("apache") && all.contains("ubuntu") -> "Linux (Ubuntu)"
+            all.contains("apache") && all.contains("debian") -> "Linux (Debian)"
+            all.contains("apache") -> "Linux (Apache)"
+            all.contains("nginx") -> "Linux (nginx)"
+            all.contains("iis") -> "Windows (IIS)"
+            title.contains("router", ignoreCase = true) ||
+            title.contains("login", ignoreCase = true) ||
+            title.contains("admin", ignoreCase = true) ||
+            title.contains("setup", ignoreCase = true) -> "Unknown Router"
+            else -> ""
+        }
+    }
+
+    private fun identifyRouterModel(brand: String, title: String): String {
+        if (title.isEmpty()) return ""
+        val t = title.trim()
+        // Try to extract model number from title: "TL-WR841N", "AC1200", etc.
+        val model = Regex("""[A-Z0-9]+[-][A-Z0-9]+""").find(t)
+        if (model != null) return model.value
+        val model2 = Regex("""((TL|DIR|RT|WR|WRT|WAN|LAN|AC|AX)[-]?[A-Z0-9]+)""", RegexOption.IGNORE_CASE).find(t)
+        if (model2 != null) return model2.value.uppercase()
+        // Return title if it looks like a model
+        if (t.length < 40 && !t.lowercase().contains("login") && !t.lowercase().contains("admin")) {
+            return t.take(30)
+        }
+        return ""
+    }
+
+    private fun extractFirmware(title: String): String {
+        // Look for version numbers like "v1.0", "2.5.1", "2024"
+        val ver = Regex("""v?\d+[.]\d+[.]?\d*""").find(title)
+        if (ver != null) return ver.value
+        val ver2 = Regex("""\d{4}""").find(title)
+        if (ver2 != null) return ver2.value
+        return ""
+    }
+
+    private fun updateRouterResults(routers: ConcurrentHashMap<String, MutableList<String>>) {
+        val sb = StringBuilder()
+        val sorted = routers.entries.sortedBy { it.key }
+        var num = 1
+        for ((ip, routerInfo) in sorted) {
+            sb.appendLine("\uD83C\uDF10 $num. http://$ip/")
+            for (info in routerInfo) {
+                sb.appendLine("   \u2514 $info")
+            }
+            sb.appendLine()
+            num++
+        }
+        tvResults.text = sb.toString().trimStart()
+        tvResults.movementMethod = LinkMovementMethod.getInstance()
+        tvSummary.text = "${routers.size} router(s) found"
     }
 
     private fun uiPost(msg: String, hex: String, ok: Boolean) {
