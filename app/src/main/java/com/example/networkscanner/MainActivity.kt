@@ -453,10 +453,6 @@ class MainActivity : AppCompatActivity() {
             all.contains("MySQL") && all.contains("3306") -> "Database server"
             all.contains("HTTP") && all.contains("401") -> "Router (Auth required)"
             else -> ""
-
-    }
-
-
         }
     }
 
@@ -582,18 +578,12 @@ class MainActivity : AppCompatActivity() {
         val text = tvResults.text.toString()
         if (text.isEmpty()) { toast("Nothing to save"); return }
         try {
-            val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            val file = java.io.File(dir, "NetScan_${java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())}.txt")
+            val ts = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.US).format(java.util.Date())
+            val file = java.io.File(filesDir, "NetScan_$ts.txt")
             file.writeText(text)
-            toast("Saved to Downloads")
+            toast("Saved")
         } catch (e: Exception) {
-            try {
-                val file = java.io.File(filesDir, "NetScan_last.txt")
-                file.writeText(text)
-                toast("Saved: ${file.absolutePath}")
-            } catch (e2: Exception) {
-                toast("Save failed: ${e2.message}")
-            }
+            toast("Save failed")
         }
     }
 
@@ -601,4 +591,5 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         isScanning = false
     }
+
 }
