@@ -92,6 +92,69 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- ═══ AGGRESSIVE SETTINGS ═══ -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                app:cardElevation="0dp"
+                app:cardCornerRadius="8dp"
+                app:cardBackgroundColor="#1E1E1E">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="8dp"
+                    android:gravity="center_vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Max"
+                        android:textColor="#90A4AE"
+                        android:textSize="12sp" />
+                    <EditText
+                        android:id="@+id/inputMaxHosts"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="12dp"
+                        android:background="#2C2C2C"
+                        android:padding="6dp"
+                        android:textSize="13sp"
+                        android:textColor="#F5F5F5"
+                        android:gravity="center"
+                        android:inputType="number"
+                        android:text="254" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Timeout"
+                        android:textColor="#90A4AE"
+                        android:textSize="12sp" />
+                    <EditText
+                        android:id="@+id/inputTimeout"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="6dp"
+                        android:background="#2C2C2C"
+                        android:padding="6dp"
+                        android:textSize="13sp"
+                        android:textColor="#F5F5F5"
+                        android:gravity="center"
+                        android:inputType="number"
+                        android:text="300" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="4dp"
+                        android:text="ms"
+                        android:textColor="#90A4AE"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- ═══ SCAN BUTTONS ═══ -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
@@ -226,20 +289,7 @@
                             android:textColor="#F5F5F5"
                             android:textSize="14sp"
                             android:textStyle="bold" />
-                        <Button
-                            android:id="@+id/btnSave"
-                            android:layout_width="wrap_content"
-                            android:layout_height="28dp"
-                            android:background="#1B5E20"
-                            android:text="Save"
-                            android:textAllCaps="false"
-                            android:textColor="#80CBC4"
-                            android:textSize="12sp"
-                            android:minWidth="0dp"
-                            android:minHeight="0dp"
-                            android:paddingHorizontal="12dp"
-                            android:paddingVertical="2dp"
-                            android:visibility="gone" />
+
                     </LinearLayout>
                     <TextView
                         android:id="@+id/tvSummary"

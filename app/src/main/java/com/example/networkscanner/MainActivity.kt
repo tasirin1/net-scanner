@@ -36,6 +36,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var cardResults: View
     private lateinit var progressBar: android.widget.ProgressBar
     private lateinit var tvProgress: TextView
+    private lateinit var inputMaxHosts: android.widget.EditText
+    private lateinit var inputTimeout: android.widget.EditText
     @Volatile
     private var isScanning = false
     private val ui = Handler(Looper.getMainLooper())
@@ -54,12 +56,24 @@ class MainActivity : AppCompatActivity() {
         cardResults = findViewById(R.id.cardResults)
         progressBar = findViewById(R.id.progressBar)
         tvProgress = findViewById(R.id.tvProgress)
+        inputMaxHosts = findViewById(R.id.inputMaxHosts)
+        inputTimeout = findViewById(R.id.inputTimeout)
 
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
         findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
 
-        (findViewById<View>(R.id.btnSave) as Button).setOnClickListener { saveResults() }
+    }
+
+    // ─── Settings helpers ───
+    private fun getMaxHosts(): Int {
+        val t = inputMaxHosts.text?.toString()?.trim() ?: ""
+        return t.toIntOrNull()?.coerceIn(1, 65535) ?: 254
+    }
+
+    private fun getTimeout(): Int {
+        val t = inputTimeout.text?.toString()?.trim() ?: ""
+        return t.toIntOrNull()?.coerceIn(50, 5000) ?: 300
     }
 
     // ─── Progress helpers ───
@@ -168,7 +182,6 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Starting real Nmap...\n"
         tvSummary.text = ""
-        findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Nmap running...", "#E65100", true)
         showProgress()
         tvProgress.text = "Scanning..."
@@ -228,7 +241,6 @@ class MainActivity : AppCompatActivity() {
             if (allResults.isNotEmpty()) {
                 ui.post {
                     updateResults(allResults, osDetected)
-                    findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
                     status("${allResults.size} host(s) found in ${elapsed / 1000}s", "#2E7D32", true)
                     toast("Nmap complete: ${allResults.size} hosts")
                 }
@@ -347,7 +359,6 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Initializing $mode...\n"
         tvSummary.text = ""
-        findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Preparing $mode...", "#E65100", true)
         showProgress()
 
@@ -385,6 +396,7 @@ class MainActivity : AppCompatActivity() {
                 val scanTargets = liveIps.toList()
                 uiPost("Scanning ${scanTargets.size} host(s)...", "#E65100", true)
 
+                val portTimeout = getTimeout()
                 val latch = CountDownLatch(scanTargets.size)
                 val scannerPool = Executors.newFixedThreadPool(Math.min(30, scanTargets.size))
 
@@ -419,7 +431,7 @@ class MainActivity : AppCompatActivity() {
                                 if (!isScanning) break
                                 try {
                                     val s = Socket()
-                                    s.connect(InetSocketAddress(ip, port), if (mode == "Nmap-Style") 300 else 200)
+                                    s.connect(InetSocketAddress(ip, port), if (mode == "Nmap-Style") portTimeout.coerceAtMost(500) else portTimeout)
                                     if (!s.isConnected) { s.close(); continue }
                                     val detail = probeService(ip, port, s, mode)
                                     synchronized(ipServices) { ipServices.add(detail) }
@@ -854,7 +866,6 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Scanning for hidden cameras...\n"
         tvSummary.text = ""
-        findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Camera scan...", "#6A1B9A", true)
         showProgress()
 
@@ -873,6 +884,7 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(targets.size)
                 val pool = Executors.newFixedThreadPool(30)
+                val progCount = AtomicInteger(0)
 
                 for (ip in targets) {
                     if (!isScanning) { latch.countDown(); continue }
@@ -898,8 +910,8 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = scanCount.incrementAndGet()
-                                ui.post { updateProgress(done, scanTargets.size) }
+                                val done = progCount.incrementAndGet()
+                                ui.post { updateProgress(done, targets.size) }
                             }
                     }
                 }
@@ -916,7 +928,6 @@ class MainActivity : AppCompatActivity() {
             val summary = "\n── Done in ${elapsed / 1000}s ──  ${cameras.size} camera(s) found"
             ui.post {
                 tvSummary.text = "$summary\n\u26A0\uFE0F Review privacy settings if unexpected cameras found"
-                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
                 status("${cameras.size} camera(s) in ${elapsed / 1000}s", "#6A1B9A", true)
                 toast("${cameras.size} camera(s) found")
             }
@@ -928,7 +939,7 @@ class MainActivity : AppCompatActivity() {
     private fun probeCamera(ip: String, port: Int): String? {
         return try {
             val s = Socket()
-            s.connect(InetSocketAddress(ip, port), 500)
+            s.connect(InetSocketAddress(ip, port), getTimeout().coerceAtMost(1000))
             if (!s.isConnected) { s.close(); return null }
 
             var result: String? = null
@@ -1141,7 +1152,6 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Scanning for routers...\n"
         tvSummary.text = ""
-        findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Router scan...", "#E65100", true)
         showProgress()
 
@@ -1160,6 +1170,7 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(targets.size)
                 val pool = Executors.newFixedThreadPool(30)
+                val progCount = AtomicInteger(0)
 
                 for (ip in targets) {
                     if (!isScanning) { latch.countDown(); continue }
@@ -1185,8 +1196,8 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = scanCount.incrementAndGet()
-                                ui.post { updateProgress(done, scanTargets.size) }
+                                val done = progCount.incrementAndGet()
+                                ui.post { updateProgress(done, targets.size) }
                             }
                     }
                 }
@@ -1202,7 +1213,6 @@ class MainActivity : AppCompatActivity() {
             val elapsed = System.currentTimeMillis() - startTime
             ui.post {
                 tvSummary.text = "${routers.size} router(s) found in ${elapsed / 1000}s"
-                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
                 status("${routers.size} router(s) in ${elapsed / 1000}s", "#E65100", true)
                 toast("${routers.size} router(s) found")
             }
@@ -1214,7 +1224,7 @@ class MainActivity : AppCompatActivity() {
     private fun probeRouter(ip: String, port: Int): String? {
         return try {
             val s = Socket()
-            s.connect(InetSocketAddress(ip, port), 500)
+            s.connect(InetSocketAddress(ip, port), getTimeout().coerceAtMost(1000))
             if (!s.isConnected) { s.close(); return null }
 
             var result: String? = null
@@ -1420,7 +1430,6 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Scanning for shares...\n"
         tvSummary.text = ""
-        findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Shares scan...", "#33691E", true)
         showProgress()
 
@@ -1439,6 +1448,7 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(targets.size)
                 val pool = Executors.newFixedThreadPool(30)
+                val progCount = AtomicInteger(0)
 
                 for (ip in targets) {
                     if (!isScanning) { latch.countDown(); continue }
@@ -1460,8 +1470,8 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = scanCount.incrementAndGet()
-                                ui.post { updateProgress(done, scanTargets.size) }
+                                val done = progCount.incrementAndGet()
+                                ui.post { updateProgress(done, targets.size) }
                             }
                     }
                 }
@@ -1477,7 +1487,6 @@ class MainActivity : AppCompatActivity() {
             val elapsed = System.currentTimeMillis() - startTime
             ui.post {
                 tvSummary.text = "${shares.size} host(s) with shares in ${elapsed / 1000}s"
-                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
                 status("${shares.size} host(s) with shares", "#33691E", true)
                 toast("${shares.size} host(s) with shares")
             }
@@ -1489,7 +1498,7 @@ class MainActivity : AppCompatActivity() {
     private fun probeShare(ip: String, port: Int): String? {
         return try {
             val s = Socket()
-            s.connect(InetSocketAddress(ip, port), 500)
+            s.connect(InetSocketAddress(ip, port), getTimeout().coerceAtMost(1000))
             if (!s.isConnected) { s.close(); return null }
 
             var result: String? = null
@@ -1661,7 +1670,6 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Discovering devices...\n"
         tvSummary.text = ""
-        findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Device discovery...", "#01579B", true)
         showProgress()
 
@@ -1694,6 +1702,7 @@ class MainActivity : AppCompatActivity() {
 
                 val latch = CountDownLatch(hosts.size)
                 val pool = Executors.newFixedThreadPool(30)
+                val progCount = AtomicInteger(0)
 
                 for (ip in hosts) {
                     if (!isScanning) { latch.countDown(); continue }
@@ -1706,8 +1715,8 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = scanCount.incrementAndGet()
-                                ui.post { updateProgress(done, scanTargets.size) }
+                                val done = progCount.incrementAndGet()
+                                ui.post { updateProgress(done, hosts.size) }
                             }
                     }
                 }
@@ -1728,7 +1737,6 @@ class MainActivity : AppCompatActivity() {
                 val phoneCount = devices.values.count { it.type.contains("Phone", ignoreCase = true) || it.type.contains("Android", ignoreCase = true) }
                 val summary = "${devices.size} device(s) | $routerCount router(s) · $cameraCount camera(s) · $computerCount computer(s) · $phoneCount phone(s)"
                 tvSummary.text = summary
-                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
                 status("${devices.size} device(s) in ${elapsed / 1000}s", "#01579B", true)
                 toast("${devices.size} device(s) found")
             }
@@ -1938,7 +1946,6 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Full discovery...\n"
         tvSummary.text = ""
-        findViewById<View>(R.id.btnSave).visibility = View.GONE
         status("Discovering...", "#BF360C", true)
         showProgress()
 
@@ -1967,7 +1974,7 @@ class MainActivity : AppCompatActivity() {
                     if (live.isNotEmpty()) liveHosts = live
                 }
 
-                val hosts = liveHosts.take(254).toList()
+                val hosts = liveHosts.take(getMaxHosts()).toList()
                 uiPost("Probing ${hosts.size} host(s)...", "#BF360C", true)
 
                 val latch = CountDownLatch(hosts.size)
@@ -1986,7 +1993,7 @@ class MainActivity : AppCompatActivity() {
                                 if (!isScanning) break
                                 try {
                                     val s = Socket()
-                                    s.connect(InetSocketAddress(ip, port), 300)
+                                    s.connect(InetSocketAddress(ip, port), getTimeout())
                                     if (!s.isConnected) { s.close(); continue }
 
                                     val isWeb = port in intArrayOf(80, 443, 8080, 8443, 8081, 8082, 8888, 9000)
@@ -1997,7 +2004,8 @@ class MainActivity : AppCompatActivity() {
                                     // Camera detection
                                     if (isCameraPort) {
                                         val cam = probeCameraPort(ip, port)
-                                        if (cam != null) deviceCameras.add(cam)
+                                        if (cam != null) deviceCamer
+                val progCount = AtomicInteger(0)as.add(cam)
                                     }
 
                                     // Router detection
@@ -2036,8 +2044,8 @@ class MainActivity : AppCompatActivity() {
                             }
                         } finally {
                                 latch.countDown()
-                                val done = scanCount.incrementAndGet()
-                                ui.post { updateProgress(done, scanTargets.size) }
+                                val done = progCount.incrementAndGet()
+                                ui.post { updateProgress(done, hosts.size) }
                             }
                     }
                 }
@@ -2054,7 +2062,6 @@ class MainActivity : AppCompatActivity() {
             ui.post {
                 val summary = "\uD83D\uDCF7 ${cameras.size} camera(s)  \uD83C\uDF10 ${routers.size} router(s)  \uD83D\uDCC1 ${shares.size} share(s)  |  ${elapsed / 1000}s"
                 tvSummary.text = summary
-                findViewById<View>(R.id.btnSave).visibility = View.VISIBLE
                 status("${cameras.size + routers.size + shares.size} service(s) in ${elapsed / 1000}s", "#BF360C", true)
                 toast("Discover complete")
             }
@@ -2069,8 +2076,8 @@ class MainActivity : AppCompatActivity() {
         return try {
             val proto = if (port in intArrayOf(443, 8443)) "https" else "http"
             val conn = URL("$proto://$ip:$port/").openConnection() as HttpURLConnection
-            conn.connectTimeout = 500
-            conn.readTimeout = 500
+            conn.connectTimeout = getTimeout().coerceAtMost(2000)
+            conn.readTimeout = getTimeout().coerceAtMost(2000)
             conn.setRequestProperty("User-Agent", "Mozilla/5.0")
             val code = try { conn.responseCode } catch (_: Exception) { 0 }
             if (code == 0 || code == 404) { conn.disconnect(); return null }
@@ -2243,19 +2250,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun toast(msg: String) {
         Toast.makeText(this, "  $msg  ", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun saveResults() {
-        val text = tvResults.text.toString()
-        if (text.isEmpty()) { toast("Nothing to save"); return }
-        try {
-            val ts = java.text.SimpleDateFormat("yyyy-MM-dd_HHmm", java.util.Locale.US).format(java.util.Date())
-            val file = java.io.File(filesDir, "NetScan_$ts.txt")
-            file.writeText(text)
-            toast("Saved")
-        } catch (e: Exception) {
-            toast("Save failed")
-        }
     }
 
     override fun onDestroy() {
