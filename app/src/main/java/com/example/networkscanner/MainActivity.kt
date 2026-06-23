@@ -53,44 +53,41 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnQuick).setOnClickListener { quickScan() }
         findViewById<MaterialButton>(R.id.btnFull).setOnClickListener { fullScan() }
         findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
-        // Preset chips
 
         (findViewById<View>(R.id.btnSave) as Button).setOnClickListener { saveResults() }
     }
 
     // ─── Get target from input ───
     private fun getTarget(): String {
-        val t = inputTarget.text?.toString()?.trim() ?: ""
-        return if (t.isEmpty()) "192.168.0.0/24" else t
+        return inputTarget.text?.toString()?.trim() ?: ""
     }
 
     // ─── Quick scan ───
     private fun quickScan() {
         if (isScanning) { toast("Already scanning!"); return }
-        runScan(getTarget(), quickPorts, "Quick Scan")
+        val target = getTarget()
+        if (target.isEmpty()) { toast("Enter target!"); return }
+        runScan(target, quickPorts, "Quick Scan")
     }
 
     // ─── Full scan (all ports on a single target) ───
     private fun fullScan() {
         if (isScanning) { toast("Already scanning!"); return }
         val target = getTarget()
-        // If CIDR, confirm 200+ ports on subnet is heavy
-        if (target.contains("/")) {
-            AlertDialog.Builder(this)
-                .setTitle("Full Scan")
-                .setMessage("Full scan on a subnet scans 200+ ports on all hosts.\nMay take 2-3 minutes.")
-                .setPositiveButton("Start") { _, _ -> runScan(target, getAllPorts(), "Full Scan") }
-                .setNegativeButton("Cancel", null)
-                .show()
-        } else {
-            runScan(target, getAllPorts(), "Full Scan")
-        }
+        if (target.isEmpty()) { toast("Enter target!"); return }
+        AlertDialog.Builder(this)
+            .setTitle("Full Scan")
+            .setMessage("Scans 200+ ports on ALL hosts in subnet (auto-expands single IP to /24).\nMay take 2-3 minutes.")
+            .setPositiveButton("Start") { _, _ -> runScan(target, getAllPorts(), "Full Scan") }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     // ─── Nmap-style scan (OS detection + version + aggressive) ───
     private fun nmapScan() {
         if (isScanning) { toast("Already scanning!"); return }
         val target = getTarget()
+        if (target.isEmpty()) { toast("Enter target!"); return }
         val nmapPath = findNmapBinary()
         if (nmapPath != null) {
             AlertDialog.Builder(this)
@@ -330,8 +327,9 @@ class MainActivity : AppCompatActivity() {
             val osDetected = ConcurrentHashMap<String, String>()
 
             try {
+                if (target.isEmpty()) { uiPost("Empty target", "#C62828", false); isScanning = false; return@Thread }
                 // Parse target into list of IPs
-                val targets = expandTarget(target)
+                val targets = autoExpandTarget(target)
                 if (targets.isEmpty()) {
                     uiPost("Invalid target: $target", "#C62828", false)
                     isScanning = false
@@ -789,12 +787,18 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-
+    // ─── Hidden Camera Scanner ───
     private fun cameraScan() {
         if (isScanning) { toast("Already scanning!"); return }
         val target = getTarget()
-        runCameraScan(target)
-    }\n
+        AlertDialog.Builder(this)
+            .setTitle("Camera Scanner")
+            .setMessage("Scanning for hidden IP cameras on $target\n\nChecks common camera ports:\n554 (RTSP), 8899 (ONVIF), 34567 (Hikvision),\n37777 (Dahua), 80/443/8080/8443 (Web)\n\nAlso probes for camera-specific HTTP responses.")
+            .setPositiveButton("Scan") { _, _ -> runCameraScan(target) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
     private val cameraPorts = intArrayOf(
         80, 443, 554, 8080, 8443, 8899, 34567, 37777,
         5000, 7000, 8000, 8554, 9000, 10000, 37215, 49152
@@ -1062,12 +1066,18 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton("Scan") { _, _ -> runRouterScan(target) }
             .setNegativeButton("Cancel", null)
             .show()
+    }
 
-    private fun routerScan() {
-        if (isScanning) { toast("Already scanning!"); return }
-        val target = getTarget()
-        runRouterScan(target)
-    }\n        "/system", "/system/", "/router", "/router/",
+    private val routerPorts = intArrayOf(
+        80, 443, 8080, 8443, 8291, 7547, 5000, 7000,
+        8081, 8082, 8888, 9000, 10000, 2000, 444, 81, 82, 88
+    )
+
+    private val routerPaths = arrayOf(
+        "/", "/admin", "/admin/", "/login", "/login/",
+        "/setup", "/setup/", "/config", "/config/",
+        "/management", "/management/", "/status", "/status/",
+        "/system", "/system/", "/router", "/router/",
         "/cgi-bin/", "/cgi-bin/login", "/cgi-bin/status",
         "/main", "/main/", "/home", "/home/",
         "/index.htm", "/index.html", "/login.htm", "/login.html"
@@ -1362,12 +1372,18 @@ class MainActivity : AppCompatActivity() {
         tvResults.text = "Scanning for shares...\n"
         tvSummary.text = ""
         findViewById<View>(R.id.btnSave).visibility = View.GONE
+        status("Shares scan...", "#33691E", true)
 
-    private fun sharesScan() {
-        if (isScanning) { toast("Already scanning!"); return }
-        val target = getTarget()
-        runSharesScan(target)
-    }\n                    return@Thread
+        Thread {
+            val shares = ConcurrentHashMap<String, MutableList<String>>()
+            val startTime = System.currentTimeMillis()
+
+            try {
+                val targets = autoExpandTarget(target)
+                if (targets.isEmpty()) {
+                    uiPost("Invalid target", "#C62828", false)
+                    isScanning = false
+                    return@Thread
                 }
                 uiPost("Checking ${targets.size} host(s) for shares...", "#33691E", true)
 
@@ -1561,32 +1577,17 @@ class MainActivity : AppCompatActivity() {
 
 
     // ─── Device Discovery (all connected devices) ───
-    private fun devicesScan(target: String) {
+    private fun devicesScan() {
         if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
         val targets = autoExpandTarget(target)
-        if (targets.isEmpty()) {
-            uiPost("Invalid target", "#C62828", false)
-            isScanning = false
-            return@Thread
-        }
-        uiPost("Scanning ${targets.size} host(s)...", "#E65100", true)
-        val latch = CountDownLatch(targets.size)
-        val pool = Executors.newFixedThreadPool(30)
-        for (ip in targets) {
-            if (!isScanning) { latch.countDown(); continue }
-            pool.execute {
-                try {
-                    val info = identifyDevice(ip)
-                    if (info != null) {
-                        synchronized(cameras) { cameras[ip] = info }
-                        ui.post { updateCameraResults(cameras) }
-                    }
-                } finally { latch.countDown() }
-            }
-        }
-        pool.shutdown()
-        latch.await()
-        isScanning = false
+        val hostCount = targets.size
+        AlertDialog.Builder(this)
+            .setTitle("Device Discovery")
+            .setMessage("Scanning all connected devices on $target\n\n~$hostCount IP(s) to check\n\nIdentifies device type by probing\ncommon ports & services.")
+            .setPositiveButton("Scan") { _, _ -> runDevicesScan(target) }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private data class DeviceInfo(
@@ -1621,7 +1622,18 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // On local subnet, use ARP scan first
-                val hosts = targets.toList()
+                val localIp = getWifiIp()
+                val isLocal = targets.size > 1 && target.contains(localIp.substringBeforeLast("."))
+                var liveHosts = targets.toSet()
+
+                if (isLocal) {
+                    uiPost("Discovering live hosts...", "#01579B", true)
+                    val subnet = targets.first().substringBeforeLast(".") + "."
+                    val live = arpScan(subnet)
+                    if (live.isNotEmpty()) liveHosts = live
+                }
+
+                val hosts = liveHosts.toList()
                 uiPost("Identifying ${hosts.size} device(s)...", "#01579B", true)
 
                 val latch = CountDownLatch(hosts.size)
@@ -1882,7 +1894,18 @@ class MainActivity : AppCompatActivity() {
                     return@Thread
                 }
 
-                val hosts = targets.take(254).toList()
+                val localIp = getWifiIp()
+                val isLocal = target.contains(localIp.substringBeforeLast("."))
+                var liveHosts = targets.toSet()
+
+                if (isLocal && targets.size > 1) {
+                    uiPost("Discovering live hosts...", "#BF360C", true)
+                    val subnet = targets.first().substringBeforeLast(".") + "."
+                    val live = arpScan(subnet)
+                    if (live.isNotEmpty()) liveHosts = live
+                }
+
+                val hosts = liveHosts.take(254).toList()
                 uiPost("Probing ${hosts.size} host(s)...", "#BF360C", true)
 
                 val latch = CountDownLatch(hosts.size)

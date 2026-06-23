@@ -86,9 +86,8 @@
                         android:textSize="15sp"
                         android:textColor="#F5F5F5"
                         android:singleLine="true"
-                        android:hint="e.g. 192.168.0.1, 10.0.0.0/24, barayacell.com"
+                        android:hint="Target IP, URL, or CIDR"
                         android:textColorHint="#666666"
-                        android:text="192.168.0.0/24"
                         android:inputType="textUri" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
