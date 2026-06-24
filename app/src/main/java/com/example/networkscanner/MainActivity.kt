@@ -150,6 +150,7 @@ class MainActivity : AppCompatActivity() {
                 // Find gateway for local subnet
                 val localIp = getWifiIp()
                 val isLocal = target.contains(localIp.substringBeforeLast("."))
+                if (isLocal) uiPost("Local network ($localIp)", "#4DB6AC", true)
 
                 // ARP/ping discovery only for local subnet
                 var liveIps = targets.toSet()
@@ -163,7 +164,7 @@ class MainActivity : AppCompatActivity() {
                 val scanTargets = liveIps.toList()
                 uiPost("Scanning ${scanTargets.size} host(s)...", "#E65100", true)
 
-                val portTimeout = 300
+                val portTimeout = 200
                 val latch = CountDownLatch(scanTargets.size)
                 val scannerPool = Executors.newFixedThreadPool(Math.min(30, scanTargets.size))
 
@@ -187,7 +188,7 @@ class MainActivity : AppCompatActivity() {
                             var rtt = ""
                             try {
                                 val start = System.nanoTime()
-                                val reachable = InetAddress.getByName(ip).isReachable(500)
+                                val reachable = InetAddress.getByName(ip).isReachable(300)
                                 if (reachable) {
                                     val ms = (System.nanoTime() - start) / 1_000_000
                                     if (ms < 500) rtt = "${ms}ms"
@@ -207,16 +208,9 @@ class MainActivity : AppCompatActivity() {
                             }
 
                             if (ipServices.isNotEmpty()) {
-                                // Prepend hostname info
-                                if (hostname.isNotEmpty()) {
-                                    synchronized(ipServices) { ipServices.add(0, "\u2192 $hostname") }
-                                }
-                                if (rtt.isNotEmpty()) {
-                                    synchronized(ipServices) { ipServices.add(if (hostname.isEmpty()) 0 else 1, "\u26A1 $rtt") }
-                                }
-
                                 allResults[ip] = ipServices
                                 activeHosts.incrementAndGet()
+                                ui.post { status("${activeHosts.get()} host(s) found...", "#E65100", true) }
 
                                 // OS fingerprint (only in Nmap mode)
                                 if (mode == "Nmap-Style") {
@@ -328,7 +322,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         pool.shutdown()
-        try { pool.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { }
+        try { pool.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) { }
         return live
     }
 
@@ -458,7 +452,7 @@ class MainActivity : AppCompatActivity() {
     private fun probeTcp(ip: String, port: Int, sock: Socket, mode: String): String {
         var banner = ""
         try {
-            sock.soTimeout = if (mode == "Nmap-Style") 1500 else 800
+            sock.soTimeout = 200
             val reader = BufferedReader(InputStreamReader(sock.getInputStream(), "ISO-8859-1"))
             val cbuf = CharArray(512)
             val len = reader.read(cbuf)
@@ -1267,6 +1261,7 @@ class MainActivity : AppCompatActivity() {
 
                 val localIp = getWifiIp()
                 val isLocal = target.contains(localIp.substringBeforeLast("."))
+                if (isLocal) uiPost("Local network ($localIp)", "#4DB6AC", true)
                 var liveHosts = targets.toSet()
 
                 if (isLocal && targets.size > 1) {
@@ -1475,7 +1470,7 @@ class MainActivity : AppCompatActivity() {
             554, 8554 -> {
                 try {
                     val s = Socket()
-                    s.connect(InetSocketAddress(ip, port), 500)
+                    s.connect(InetSocketAddress(ip, port), 300)
                     s.getOutputStream().write("OPTIONS rtsp://$ip:$port RTSP/1.0\r\nCSeq: 1\r\n\r\n".toByteArray())
                     val reader = BufferedReader(InputStreamReader(s.getInputStream(), "ISO-8859-1"))
                     val resp = reader.readLine() ?: ""
@@ -1487,7 +1482,7 @@ class MainActivity : AppCompatActivity() {
             8899, 5000 -> {
                 try {
                     val s = Socket()
-                    s.connect(InetSocketAddress(ip, port), 500)
+                    s.connect(InetSocketAddress(ip, port), 300)
                     val xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
                         "<s:Envelope xmlns:s=\"http://www.w3.org/2003/05/soap-envelope\">" +
                         "<s:Body><GetCapabilities xmlns=\"http://www.onvif.org/ver10/device/wsdl\"/>" +
