@@ -128,7 +128,7 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Initializing $mode...\n"
         tvSummary.text = ""
-        status("Preparing $mode...", "#E65100", true)
+        status("$mode starting...", "#1565C0", true)
         showProgress()
 
         Thread {
@@ -210,7 +210,7 @@ class MainActivity : AppCompatActivity() {
                             if (ipServices.isNotEmpty()) {
                                 allResults[ip] = ipServices
                                 activeHosts.incrementAndGet()
-                                ui.post { status("${activeHosts.get()} host(s) found...", "#E65100", true) }
+                                ui.post { status("${activeHosts.get()} host(s) found...", "#1565C0", true) }
 
                                 // OS fingerprint (only in Nmap mode)
                                 if (mode == "Nmap-Style") {
@@ -239,7 +239,7 @@ class MainActivity : AppCompatActivity() {
             val summary = "\n── Done in ${elapsed / 1000}s ──  ${activeHosts.get()} host(s) found"
             ui.post {
                 tvSummary.text = summary
-                status("${activeHosts.get()} host(s) found in ${elapsed / 1000}s", "#2E7D32", true)
+                status("${activeHosts.get()} host(s) in ${elapsed / 1000}s", "#1565C0", true)
                 toast("Complete: ${activeHosts.get()} hosts")
             }
             ui.post { hideProgress() }
@@ -619,7 +619,7 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Scanning for hidden cameras...\n"
         tvSummary.text = ""
-        status("Camera scan...", "#6A1B9A", true)
+        status("Camera scan...", "#00838F", true)
         showProgress()
 
         Thread {
@@ -678,7 +678,7 @@ class MainActivity : AppCompatActivity() {
             val summary = "\n── Done in ${elapsed / 1000}s ──  ${cameras.size} camera(s) found"
             ui.post {
                 tvSummary.text = "$summary\n\u26A0\uFE0F Review privacy settings if unexpected cameras found"
-                status("${cameras.size} camera(s) in ${elapsed / 1000}s", "#6A1B9A", true)
+                status("${cameras.size} camera(s) in ${elapsed / 1000}s", "#00838F", true)
                 toast("${cameras.size} camera(s) found")
                 hideProgress()
             }
@@ -845,11 +845,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateCameraResults(cameras: ConcurrentHashMap<String, MutableList<String>>) {
         val sb = StringBuilder()
+        val sorted = cameras.entries.sortedBy { it.key }
         var num = 1
-        for ((ip, cams) in cameras) {
+        for ((ip, cams) in sorted) {
             sb.appendLine("\uD83D\uDCF7 $num. http://$ip/")
             for (cam in cams) {
-                sb.appendLine("   \u2514 $cam")
+                sb.appendLine("   $cam")
             }
             sb.appendLine()
             num++
@@ -893,7 +894,7 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Scanning for routers...\n"
         tvSummary.text = ""
-        status("Router scan...", "#E65100", true)
+        status("Router scan...", "#2E7D32", true)
         showProgress()
 
         Thread {
@@ -951,7 +952,7 @@ class MainActivity : AppCompatActivity() {
             val elapsed = System.currentTimeMillis() - startTime
             ui.post {
                 tvSummary.text = "${routers.size} router(s) found in ${elapsed / 1000}s"
-                status("${routers.size} router(s) in ${elapsed / 1000}s", "#E65100", true)
+                status("${routers.size} router(s) in ${elapsed / 1000}s", "#2E7D32", true)
                 toast("${routers.size} router(s) found")
                 hideProgress()
             }
@@ -1139,7 +1140,7 @@ class MainActivity : AppCompatActivity() {
         for ((ip, routerInfo) in sorted) {
             sb.appendLine("\uD83C\uDF10 $num. http://$ip/")
             for (info in routerInfo) {
-                sb.appendLine("   \u2514 $info")
+                sb.appendLine("   $info")
             }
             sb.appendLine()
             num++
@@ -1159,7 +1160,7 @@ class MainActivity : AppCompatActivity() {
                 cardResults.visibility = View.VISIBLE
                 tvResults.text = "URL Path Scan on $target...\n"
                 tvSummary.text = ""
-                status("URL Path scan...", "#1565C0", true)
+                status("URL Path scan...", "#4A148C", true)
                 showProgress()
             }
             val found = StringBuffer()
@@ -1200,7 +1201,7 @@ class MainActivity : AppCompatActivity() {
             ui.post {
                 tvResults.text = "URL Path Scan on $target\n${found.toString()}$result\n\u23F1 ${elapsed / 1000}s"
                 tvSummary.text = "$totalFound paths found"
-                status("$totalFound paths found in ${elapsed / 1000}s", "#1565C0", true)
+                status("$totalFound paths in ${elapsed / 1000}s", "#4A148C", true)
                 hideProgress()
             }
             isScanning = false
@@ -1242,7 +1243,7 @@ class MainActivity : AppCompatActivity() {
         cardResults.visibility = View.VISIBLE
         tvResults.text = "Full discovery...\n"
         tvSummary.text = ""
-        status("Discovering...", "#BF360C", true)
+        status("Discovering...", "#E65100", true)
         showProgress()
 
         Thread {
@@ -1574,9 +1575,9 @@ class MainActivity : AppCompatActivity() {
             val ipLabel = "${allIps.indexOf(ip) + 1}. http://$ip/"
             sb.appendLine(ipLabel)
 
-            cameras[ip]?.forEach { sb.appendLine("   \u2514 $it") }
-            routers[ip]?.forEach { sb.appendLine("   \u2514 $it") }
-            shares[ip]?.forEach { sb.appendLine("   \u2514 $it") }
+            cameras[ip]?.forEach { sb.appendLine("   \uD83D\uDCF7 $it") }
+            routers[ip]?.forEach { sb.appendLine("   \uD83C\uDF10 $it") }
+            shares[ip]?.forEach { sb.appendLine("   \uD83D\uDCC1 $it") }
 
             sb.appendLine()
         }
