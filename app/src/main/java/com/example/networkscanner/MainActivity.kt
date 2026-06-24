@@ -69,62 +69,46 @@ class MainActivity : AppCompatActivity() {
         hideProgress()
         ui.post {
             val t = tvResults.text?.toString() ?: ""
-            tvResults.text = t + "\n\u2716 Stopped by user"
+            tvResults.text = t + "\n\u2716 Stopped"
             status("Stopped", "#C62828", false)
-            findViewById<MaterialButton>(R.id.btnStop).isEnabled = false
         }
     }
 
-    // ─── Dot animation for scanning indicator ───
-    private var dotRunnable: Runnable? = null
-    private val dotHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    // ─── Dot animation ───
+    private var dotTimer: java.util.Timer? = null
 
     private fun showProgress() {
         ui.post { findViewById<MaterialButton>(R.id.btnStop).isEnabled = true }
-        stopDots()
-        ui.post {
-            val t = tvResults.text?.toString() ?: ""
-            if (!t.contains("Scanning")) {
-                tvResults.text = t + "\nScanning.  "
-            }
-        }
-        dotRunnable = object : Runnable {
+        dotTimer?.cancel()
+        dotTimer = java.util.Timer()
+        dotTimer?.schedule(object : java.util.TimerTask() {
             override fun run() {
-                try {
-                    val cur = tvResults.text?.toString() ?: ""
-                    val clean = cur.replace(Regex("""[\. ]*$"""), "")
-                    val dots = when ((System.currentTimeMillis() / 350) % 4) {
-                        0L -> ".  "
-                        1L -> ".. "
-                        2L -> "..."
-                        else -> "   "
-                    }
+                val d = when ((System.currentTimeMillis() / 400) % 4) {
+                    0L -> ".  "
+                    1L -> ".. "
+                    2L -> "..."
+                    else -> "   "
+                }
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
                     val st = statusText.text?.toString() ?: ""
-                    val stClean = st.replace(Regex("""[\. \n]*$"""), "")
-                    statusText.text = stClean + " " + dots.trim()
-                    if (cur.matches(Regex(""".*[\. ]{1,3}$"""))) {
-                        tvResults.text = clean + dots
-                    }
-                    dotHandler.postDelayed(this, 350)
-                } catch (_: Exception) { }
+                    statusText.text = st.replace(Regex("""[. ]*$"""), "") + d
+                }
             }
-        }
-        dotHandler.post(dotRunnable)
-    }
-
-    private fun stopDots() {
-        dotRunnable?.let { dotHandler.removeCallbacks(it) }
-        dotRunnable = null
+        }, 0, 400)
     }
 
     private fun hideProgress() {
-        ui.post { findViewById<MaterialButton>(R.id.btnStop).isEnabled = false }
-        stopDots()
-        val st = statusText.text?.toString() ?: ""
-        statusText.text = st.replace(Regex("""[\. ]+$"""), "")
+        dotTimer?.cancel()
+        dotTimer = null
+        ui.post {
+            findViewById<MaterialButton>(R.id.btnStop).isEnabled = false
+            val st = statusText.text?.toString() ?: ""
+            statusText.text = st.replace(Regex("""[. ]+$"""), "")
+        }
     }
 
     // ─── Get target from input ───
+
     private fun getTarget(): String {
         return inputTarget.text?.toString()?.trim() ?: ""
     }
