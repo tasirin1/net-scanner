@@ -163,6 +163,16 @@
                         android:textAllCaps="false"
                         android:textSize="11sp" />
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnUrlPath"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:layout_marginHorizontal="2dp"
+                        android:backgroundTint="#1565C0"
+                        android:text="URL Path"
+                        android:textAllCaps="false"
+                        android:textSize="11sp" />
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnStop"
                         android:layout_width="0dp"
                         android:layout_height="44dp"
@@ -173,10 +183,6 @@
                         android:textAllCaps="false"
                         android:textSize="11sp"
                         android:enabled="false" />
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="44dp"
-                        android:layout_weight="1" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 

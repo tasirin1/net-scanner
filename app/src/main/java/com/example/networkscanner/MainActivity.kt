@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<MaterialButton>(R.id.btnCCTV).setOnClickListener { cameraScan() }
         findViewById<MaterialButton>(R.id.btnWeb).setOnClickListener { routerScan() }
         findViewById<MaterialButton>(R.id.btnDiscover).setOnClickListener { discoverScan() }
+        findViewById<MaterialButton>(R.id.btnUrlPath).setOnClickListener { urlPathScan() }
         findViewById<MaterialButton>(R.id.btnStop).setOnClickListener { stopScan() }
 
     }
@@ -1153,6 +1154,63 @@ class MainActivity : AppCompatActivity() {
         tvResults.text = sb.toString().trimStart()
         tvResults.movementMethod = LinkMovementMethod.getInstance()
         tvSummary.text = "${routers.size} router(s) found"
+    }
+
+    private fun urlPathScan() {
+        if (isScanning) { toast("Already scanning!"); return }
+        val target = getTarget()
+        if (target.isEmpty()) { toast("Enter target!"); return }
+        Thread {
+            isScanning = true
+            ui.post {
+                cardResults.visibility = View.VISIBLE
+                tvResults.text = "URL Path Scan on $target...\n"
+                tvSummary.text = ""
+                status("URL Path scan...", "#1565C0", true)
+                showProgress()
+            }
+            val found = StringBuffer()
+            val webPorts = intArrayOf(80, 443, 8080, 8443, 81, 88, 3000, 5000, 8081, 8888, 9000)
+            var totalChecked = 0
+            var totalFound = 0
+
+            for (port in webPorts) {
+                if (!isScanning) break
+                for (path in webPaths) {
+                    if (!isScanning) break
+                    try {
+                        val base = if (port == 443 || port == 8443) "https://$target" else "http://$target"
+                        // If target is an IP, just use it directly
+                        val url = if (target.contains("://")) target.trimEnd('/') + path
+                                   else "$base:$port$path"
+                        val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                        conn.connectTimeout = 1500
+                        conn.readTimeout = 1500
+                        conn.instanceFollowRedirects = false
+                        val code = conn.responseCode
+                        totalChecked++
+                        if (code in intArrayOf(200, 201, 204, 301, 302, 401, 403)) {
+                            totalFound++
+                            val info = if (code == 401) " (Auth req)" else if (code in 301..303) " -> ${conn.getHeaderField("Location")?.take(40) ?: ""}" else ""
+                            found.append("\n\u2705 Port $port$path [HTTP $code]$info")
+                            val msg = found.toString()
+                            ui.post { tvResults.text = "URL Path Scan on $target...\n$msg" }
+                        }
+                    } catch (_: Exception) { }
+                }
+            }
+
+            val elapsed = System.currentTimeMillis() - startTime
+            val result = if (totalFound > 0) "\n\nFound $totalFound/$totalChecked paths"
+                         else "\n\nNo hidden paths found ($totalChecked checked)"
+            ui.post {
+                tvResults.text = "URL Path Scan on $target\n${found.toString()}$result\n\u23F1 ${elapsed / 1000}s"
+                tvSummary.text = "$totalFound paths found"
+                status("$totalFound paths found in ${elapsed / 1000}s", "#1565C0", true)
+                hideProgress()
+            }
+            isScanning = false
+        }.start()
     }
 
     private fun discoverScan() {
