@@ -1171,6 +1171,7 @@ class MainActivity : AppCompatActivity() {
             }
             val found = StringBuffer()
             val webPorts = intArrayOf(80, 443, 8080, 8443, 81, 88, 3000, 5000, 8081, 8888, 9000)
+            val startTime = System.currentTimeMillis()
             var totalChecked = 0
             var totalFound = 0
 
